@@ -1,0 +1,124 @@
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+from googleapiclient.discovery import build
+from google.oauth2.service_account import Credentials
+import datetime
+import os
+import urllib.parse
+import base64
+import re
+
+SERVICE_ACCOUNT_FILE = "C:\\Users\\Ilias\\OneDrive\\Desktop\\pet-projects\\tg-bot-buy_book\\book-project-for-ml-07ee6afe4666.json"
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+SHEET_ID = "1F7msXeWiAOXc4q4u2kqfHYSIy0ZkuGGaBx7r0_Xxmj4"
+
+GOOGLE_BOOKS_API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY", "AIzaSyDssXLPBffyny4qrmUBJ9x6zlnPLo6-L_c") 
+credentials = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+service = build('sheets', 'v4', credentials=credentials)
+
+def write_to_google_sheets(user_data):
+    sheet = service.spreadsheets()
+    body = {
+        "values": [user_data]
+    }
+    sheet.values().append(
+        spreadsheetId=SHEET_ID,
+        range="Лист1!A:A",  
+        valueInputOption="USER_ENTERED",
+        body=body
+    ).execute()
+
+
+def safe_callback_data(title, authors):
+    combined = f"{title}_{authors}"
+    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '', combined)
+    if len(sanitized) > 64:
+        sanitized = sanitized[:64] 
+    return sanitized
+
+async def search(update: Update, context):
+    query = update.message.text
+    books = search_books(query)
+    if books:
+        for book in books:
+            title, authors, thumbnail, price, currency = book
+            safe_data = safe_callback_data(title, authors)
+            keyboard = [[InlineKeyboardButton("Купить", callback_data=safe_data)]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_photo(photo=thumbnail, caption=f"Название: {title}\nАвторы: {authors}\nЦена: {price} {currency}", reply_markup=reply_markup)
+    else:
+        await update.message.reply_text("Книги не найдены.")
+
+
+def search_books(query):
+    service = build('books', 'v1', developerKey=GOOGLE_BOOKS_API_KEY)
+    
+    query_string = f'intitle:{query}&langRestrict=ru'
+    
+    try:
+        request = service.volumes().list(q=query_string, maxResults=5)
+        response = request.execute()
+    except Exception as e:
+        print(f"Ошибка при выполнении запроса к Google Books API: {e}")
+        return []
+    
+    books = []
+    if "items" in response:
+        for item in response['items']:
+            title = item['volumeInfo'].get('title', 'No Title')
+            authors = ', '.join(item['volumeInfo'].get('authors', []))
+            thumbnail = item['volumeInfo'].get('imageLinks', {}).get('thumbnail', '')
+            price = item.get('saleInfo', {}).get('listPrice', {}).get('amount', 'N/A')
+            currency = item.get('saleInfo', {}).get('listPrice', {}).get('currencyCode', '')
+            if query.lower() in title.lower():
+                books.append((title, authors, thumbnail, price, currency))
+    
+    return books
+
+
+
+async def start(update: Update, context):
+    await update.message.reply_text("Введите название книги для поиска:")
+
+async def button_handler(update: Update, context):
+    query = update.callback_query
+    await query.answer()
+    data = query.data.split("_")
+
+    if len(data) >= 2:
+        title, authors = data[0], data[1]
+
+        user = query.from_user
+        user_data = [
+            user.username or user.full_name,
+            title,
+            authors,
+            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ]
+        write_to_google_sheets(user_data)
+        await query.edit_message_caption(caption=f"Вы купили книгу (с вами свяжутся админы):\nНазвание: {title}\nАвторы: {authors}\nВаши данные сохранены.")
+    else:
+        await query.edit_message_caption(caption="Произошла ошибка при обработке данных.")
+
+async def button_help(update: Update, context):
+    help_text = (
+        "Этот бот позволяет искать книги и сохранять информацию о них.\n"
+        "Как использовать бота:\n"
+        "1. Введите название книги, чтобы начать поиск.\n"
+        "2. Когда книга найдена, вы увидите информацию о ней.\n"
+        "3. Нажмите кнопку 'Купить', чтобы сохранить информацию о книге и ваших данных."
+    )
+    await update.message.reply_text(help_text)
+
+def main():
+    app = Application.builder().token("token").build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", button_help))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search))
+    app.add_handler(CallbackQueryHandler(button_handler))
+
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
