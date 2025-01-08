@@ -1,0 +1,75 @@
+import requests
+from aiogram import Bot, Dispatcher, F
+import aiogram.filters
+from aiogram.types import Message
+from server import keep_alive
+
+bot_token = 'token'
+dp = Dispatcher()
+bot = Bot(token=bot_token)
+API_KEY = '529913f8f218294993d4c76a100857ec'
+BASE_URL = 'https://api.exchangeratesapi.io/v1/latest'
+
+def ex(base: str, target: str, amount: float) -> float:
+    url = f'{BASE_URL}?access_key={API_KEY}&symbols={base},{target}'
+    response = requests.get(url)
+    data = response.json()
+    if 'error' in data:
+        print(data)
+        return None
+    x = data['rates'].get(base)
+    y = data['rates'].get(target)
+    return float(amount) * (y / x)
+
+@dp.message(aiogram.filters.CommandStart())
+async def process_start_command(message: Message):
+    welcome_message = (
+        "Привет!\n"
+        "Я бот, который умеет конвертировать валюты.\n"
+        "Чтобы конвертировать валюту, напиши команду в формате:\n"
+        "/convert <базовая_валюта> <целевая_валюта> <сумма>\n"
+        "Например: /convert USD EUR 100"
+    )
+    await message.answer(welcome_message)
+
+@dp.message(aiogram.filters.Command(commands=['convert']))
+async def process_convert_command(message: Message):
+    args = message.text.split()
+    if len(args) != 4:
+        await message.answer(
+            'Ошибка: Неправильный формат\n',
+            'Для помощи напиши /help'
+        )
+        return
+    base_val = args[1].upper()
+    target_val = args[2].upper()
+    amount = float(args[3])
+    res = ex(base_val, target_val, amount)
+    if res is not None:
+        await message.answer(
+            f'{amount} {base_val} = {res} {target_val}'
+        )
+    else:
+        await message.answer(
+            'Ошибка конвертации валют\n'
+        )
+
+@dp.message(aiogram.filters.Command(commands=['help']))
+async def process_help_command(message: Message):
+    help_message = (
+        "Чтобы конвертировать валюту, напиши команду в формате:\n"
+        "/convert <базовая_валюта> <целевая_валюта> <сумма>\n"
+        "Например: /convert USD EUR 100"
+    )
+    await message.answer(help_message)
+
+@dp.message()
+async def echo(message: Message):
+    await message.answer(
+        'Вы что-то написали, но я не понимаю.\n'
+        'Попробуйте написать /help'
+    )
+
+keep_alive()
+if __name__ == '__main__':
+    dp.run_polling(bot)
