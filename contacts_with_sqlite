@@ -1,0 +1,118 @@
+import sqlite3
+import tkinter as tk
+from tkinter import messagebox
+import os
+
+db_path = r"C:\Users\Ilias\OneDrive\Desktop\pet-projects\project_about_contacts_with_sqlite\contacts.db"
+db_exists = os.path.exists(db_path)
+conn = sqlite3.connect(db_path)
+cursor = conn.cursor()
+
+if not db_exists:
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS contacts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        email TEXT
+    )
+    """)
+    conn.commit()
+
+def add_contact():
+    name = entry_name.get()
+    phone = entry_phone.get()
+    email = entry_email.get()
+
+    if name and phone:
+        cursor.execute("INSERT INTO contacts (name, phone, email) VALUES (?, ?, ?)", (name, phone, email))
+        conn.commit()
+        messagebox.showinfo("Успех", f"Контакт {name} добавлен.")
+        clear_entries()
+        view_contacts()
+    else:
+        messagebox.showwarning("Ошибка", "Пожалуйста, введите имя и телефон.")
+def view_contacts():
+    listbox_contacts.delete(0, tk.END)
+    cursor.execute("SELECT * FROM contacts")
+    contacts = cursor.fetchall()
+    for contact in contacts:
+        listbox_contacts.insert(tk.END, f"ID: {contact[0]}, Имя: {contact[1]}, Телефон: {contact[2]}, Email: {contact[3]}")
+
+def update_contact():
+    try:
+        contact_id = int(entry_id.get())
+        name = entry_name.get()
+        phone = entry_phone.get()
+        email = entry_email.get()
+
+        if name:
+            cursor.execute("UPDATE contacts SET name = ? WHERE id = ?", (name, contact_id))
+        if phone:
+            cursor.execute("UPDATE contacts SET phone = ? WHERE id = ?", (phone, contact_id))
+        if email:
+            cursor.execute("UPDATE contacts SET email = ? WHERE id = ?", (email, contact_id))
+        
+        conn.commit()
+        messagebox.showinfo("Успех", f"Контакт с ID {contact_id} обновлен.")
+        clear_entries()
+        view_contacts()
+    except ValueError:
+        messagebox.showerror("Ошибка", "Введите корректный ID для обновления.")
+
+def delete_contact():
+    try:
+        contact_id = int(entry_id.get())
+        cursor.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
+        conn.commit()
+        messagebox.showinfo("Успех", f"Контакт с ID {contact_id} удален.")
+        clear_entries()
+        view_contacts()
+    except ValueError:
+        messagebox.showerror("Ошибка", "Введите корректный ID для удаления.")
+
+def clear_entries():
+    entry_id.delete(0, tk.END)
+    entry_name.delete(0, tk.END)
+    entry_phone.delete(0, tk.END)
+    entry_email.delete(0, tk.END)
+
+# Создание графического интерфейса
+root = tk.Tk()
+root.title("Книга контактов")
+
+# Поля ввода
+tk.Label(root, text="ID (для обновления/удаления)").grid(row=0, column=0, padx=5, pady=5)
+entry_id = tk.Entry(root)
+entry_id.grid(row=0, column=1, padx=5, pady=5)
+
+tk.Label(root, text="Имя").grid(row=1, column=0, padx=5, pady=5)
+entry_name = tk.Entry(root)
+entry_name.grid(row=1, column=1, padx=5, pady=5)
+
+tk.Label(root, text="Телефон").grid(row=2, column=0, padx=5, pady=5)
+entry_phone = tk.Entry(root)
+entry_phone.grid(row=2, column=1, padx=5, pady=5)
+
+tk.Label(root, text="Email").grid(row=3, column=0, padx=5, pady=5)
+entry_email = tk.Entry(root)
+entry_email.grid(row=3, column=1, padx=5, pady=5)
+
+# Кнопки действий
+btn_add = tk.Button(root, text="Добавить контакт", command=add_contact)
+btn_add.grid(row=4, column=0, columnspan=2, pady=5)
+
+btn_view = tk.Button(root, text="Просмотреть контакты", command=view_contacts)
+btn_view.grid(row=5, column=0, columnspan=2, pady=5)
+
+btn_update = tk.Button(root, text="Обновить контакт", command=update_contact)
+btn_update.grid(row=6, column=0, columnspan=2, pady=5)
+
+btn_delete = tk.Button(root, text="Удалить контакт", command=delete_contact)
+btn_delete.grid(row=7, column=0, columnspan=2, pady=5)
+
+listbox_contacts = tk.Listbox(root, width=50)
+listbox_contacts.grid(row=8, column=0, columnspan=2, padx=5, pady=5)
+view_contacts() 
+root.mainloop()
+conn.close()
