@@ -1,0 +1,195 @@
+import sys
+import sqlite3
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QPushButton, QWidget, QLabel, QLineEdit, QTableWidget, QTableWidgetItem
+from PyQt5.QtCore import Qt
+
+def init_db():
+    conn = sqlite3.connect("db.sqlite")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS words (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            word TEXT NOT NULL,
+            translation TEXT NOT NULL,
+            known INTEGER DEFAULT 0
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+class WordListWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Список всех слов")
+        self.setGeometry(200, 200, 600, 400)
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout()
+
+        self.table = QTableWidget(self)
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["Слово", "Перевод", "Изучено"])
+        self.load_words()
+        layout.addWidget(self.table)
+
+        close_button = QPushButton("Закрыть", self)
+        close_button.clicked.connect(self.close)
+        layout.addWidget(close_button)
+
+        self.setLayout(layout)
+
+    def load_words(self):
+        conn = sqlite3.connect("db.sqlite")
+        cursor = conn.cursor()
+        cursor.execute("SELECT word, translation, known FROM words")
+        rows = cursor.fetchall()
+        conn.close()
+
+        self.table.setRowCount(len(rows))
+        for i, row in enumerate(rows):
+            self.table.setItem(i, 0, QTableWidgetItem(row[0]))
+            self.table.setItem(i, 1, QTableWidgetItem(row[1]))
+            known_item = QTableWidgetItem("Да" if row[2] == 1 else "Нет")
+            self.table.setItem(i, 2, known_item)
+
+class WordApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Учим слова")
+        self.setGeometry(200, 200, 500, 400)
+        self.current_card = None
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout()
+
+        self.word_input = QLineEdit(self)
+        self.word_input.setPlaceholderText("Введите слово")
+        self.word_input.setStyleSheet("padding: 10px; font-size: 18px; border-radius: 8px; border: 1px solid #ccc;")
+        layout.addWidget(self.word_input)
+
+        self.translation_input = QLineEdit(self)
+        self.translation_input.setPlaceholderText("Введите перевод")
+        self.translation_input.setStyleSheet("padding: 10px; font-size: 18px; border-radius: 8px; border: 1px solid #ccc;")
+        layout.addWidget(self.translation_input)
+
+        add_button = QPushButton("Добавить слово", self)
+        add_button.setStyleSheet("background-color: #4CAF50; color: white; padding: 10px 20px; border-radius: 8px; font-size: 16px;")
+        add_button.clicked.connect(self.add_word)
+        layout.addWidget(add_button)
+
+        self.card_label = QLabel("Здесь будут слова", self)
+        self.card_label.setStyleSheet("font-size: 24px; font-weight: bold; text-align: center; padding: 20px; background-color: #f0f0f0; border-radius: 8px;")
+        layout.addWidget(self.card_label)
+
+        self.flip_button = QPushButton("Показать перевод", self)
+        self.flip_button.setStyleSheet("background-color: #2196F3; color: white; padding: 10px 20px; border-radius: 8px; font-size: 16px;")
+        self.flip_button.clicked.connect(self.flip_card)
+        layout.addWidget(self.flip_button)
+
+        next_button = QPushButton("Следующее слово", self)
+        next_button.setStyleSheet("background-color: #FF9800; color: white; padding: 10px 20px; border-radius: 8px; font-size: 16px;")
+        next_button.clicked.connect(self.next_card)
+        layout.addWidget(next_button)
+
+        self.know_button = QPushButton("Знаю слово", self)
+        self.know_button.setStyleSheet("background-color: #8BC34A; color: white; padding: 10px 20px; border-radius: 8px; font-size: 16px;")
+        self.know_button.clicked.connect(self.mark_as_known)
+        layout.addWidget(self.know_button)
+
+        delete_known_button = QPushButton("Удалить изученные слова", self)
+        delete_known_button.setStyleSheet("background-color: #f44336; color: white; padding: 10px 20px; border-radius: 8px; font-size: 16px;")
+        delete_known_button.clicked.connect(self.delete_known_words)
+        layout.addWidget(delete_known_button)
+
+        list_button = QPushButton("Список всех слов", self)
+        list_button.setStyleSheet("background-color: #673AB7; color: white; padding: 10px 20px; border-radius: 8px; font-size: 16px;")
+        list_button.clicked.connect(self.open_word_list_window)
+        layout.addWidget(list_button)
+
+        container = QWidget()
+        container.setLayout(layout)
+        self.setCentralWidget(container)
+        self.load_next_card()
+
+    def add_word(self):
+        word = self.word_input.text()
+        translation = self.translation_input.text()
+        if word and translation:
+            conn = sqlite3.connect("db.sqlite")
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO words (word, translation) VALUES (?, ?)", (word, translation))
+            conn.commit()
+            conn.close()
+            self.word_input.clear()
+            self.translation_input.clear()
+            self.card_label.setText("Карточка добавлена!")
+        else:
+            self.card_label.setText("Заполните оба поля!")
+
+    def load_next_card(self):
+        conn = sqlite3.connect("db.sqlite")
+        cursor = conn.cursor()
+        cursor.execute("SELECT word, translation FROM words WHERE known = 0 ORDER BY RANDOM() LIMIT 1")
+        self.current_card = cursor.fetchone()
+        conn.close()
+        if self.current_card:
+            self.card_label.setText(self.current_card[0])
+            self.flip_button.setText("Показать перевод")
+            self.know_button.setEnabled(True)
+        else:
+            self.card_label.setText("Словарь пуст.")
+            self.know_button.setEnabled(False)
+
+    def flip_card(self):
+        if self.current_card:
+            current_text = self.card_label.text()
+            if current_text == self.current_card[0]:
+                self.card_label.setText(self.current_card[1])
+                self.flip_button.setText("Показать оригинал")
+            else:
+                self.card_label.setText(self.current_card[0])
+                self.flip_button.setText("Показать перевод")
+
+    def next_card(self):
+        self.load_next_card()
+
+    def delete_known_words(self):
+        conn = sqlite3.connect("db.sqlite")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM words WHERE known = 1")
+        conn.commit()
+        conn.close()
+        self.card_label.setText("Все изученные слова удалены.")
+        self.flip_button.setText("Показать перевод")
+        self.load_next_card()
+
+    def mark_as_known(self):
+        if self.current_card:
+            conn = sqlite3.connect("db.sqlite")
+            cursor = conn.cursor()
+            cursor.execute("UPDATE words SET known = 1 WHERE word = ?", (self.current_card[0],))
+            conn.commit()
+            conn.close()
+            self.load_next_card()
+
+    def open_word_list_window(self):
+        self.word_list_window = WordListWindow()
+        self.word_list_window.show()
+
+if __name__ == "__main__":
+    init_db()
+    app = QApplication(sys.argv)
+    app.setStyleSheet("""
+        QMainWindow {
+            background-color: #e8e8e8;
+        }
+        QPushButton:hover {
+            background-color: #64b5f6;
+        }
+    """)
+
+    window = WordApp()
+    window.show()
+    sys.exit(app.exec_())
