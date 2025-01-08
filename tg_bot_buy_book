@@ -10,7 +10,7 @@ import re
 
 SERVICE_ACCOUNT_FILE = "C:\\Users\\Ilias\\OneDrive\\Desktop\\pet-projects\\tg-bot-buy_book\\book-project-for-ml-07ee6afe4666.json"
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-SHEET_ID = "1F7msXeWiAOXc4q4u2kqfHYSIy0ZkuGGaBx7r0_Xxmj4"
+SHEET_ID = "id"
 
 GOOGLE_BOOKS_API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY", "AIzaSyDssXLPBffyny4qrmUBJ9x6zlnPLo6-L_c") 
 credentials = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
